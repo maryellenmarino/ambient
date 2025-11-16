@@ -1,4 +1,4 @@
-import { Text, TouchableOpacity, View, ActivityIndicator, ScrollView } from "react-native";
+import { Text, TouchableOpacity, View, ActivityIndicator, ScrollView, Alert } from "react-native";
 import { useState, useRef, useEffect } from "react";
 import { MaterialIcons } from "@expo/vector-icons";
 import {
@@ -11,6 +11,7 @@ import {
 import { SCREEN_HEIGHT } from "@/styles/ipod/constants";
 import { generatePlaylist, GeneratedPlaylist } from "@/services/playlist.service";
 import { Theme } from "@/services/spotify.service";
+import { openSpotifyTrack } from "@/services/spotify-deeplink.service";
 
 type Screen = "menu" | "theme" | "playlist";
 
@@ -125,6 +126,22 @@ export default function IPodScreen() {
       setSelectedTheme(themeItems[currentIdx]);
       setCurrentScreen("menu");
       setSelectedIndex(0);
+    } else if (currentScreen === "playlist") {
+      // Playlist screen - open track in Spotify
+      if (generatedPlaylist && currentIdx > 0) {
+        // Index 0 is the playlist name, so subtract 1 for track index
+        const trackIndex = currentIdx - 1;
+        const track = generatedPlaylist.tracks[trackIndex];
+        
+        if (track) {
+          try {
+            await openSpotifyTrack(track);
+          } catch (error) {
+            console.error("Error opening Spotify track:", error);
+            // Error is already handled by openSpotifyTrack with Alert
+          }
+        }
+      }
     }
   };
 
