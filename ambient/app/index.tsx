@@ -12,6 +12,10 @@ import { SCREEN_HEIGHT } from "@/styles/ipod/constants";
 import { generatePlaylist, GeneratedPlaylist } from "@/services/playlist.service";
 import { Theme } from "@/services/spotify.service";
 import { openSpotifyTrack } from "@/services/spotify-deeplink.service";
+import { 
+  createSpotifyPlaylistFromTracks, 
+  openSpotifyPlaylist 
+} from "@/services/spotify-playlist.service";
 
 type Screen = "menu" | "theme" | "playlist";
 
@@ -22,6 +26,7 @@ export default function IPodScreen() {
   const [selectedSongIndex, setSelectedSongIndex] = useState(0);
   const [selectedTheme, setSelectedTheme] = useState<Theme>("Fantasy");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [generatedPlaylist, setGeneratedPlaylist] = useState<GeneratedPlaylist | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,11 +38,11 @@ export default function IPodScreen() {
   const getPlaylistItems = () => {
     if (generatedPlaylist) {
       return [
-        generatedPlaylist.name,
+        "Select All",
         ...generatedPlaylist.tracks.map((track) => `${track.artist} - ${track.name}`),
       ];
     }
-    return ["Playlist", "Song #1", "Song #2", "Song #3", "Song #4"];
+    return ["Select All", "Song #1", "Song #2", "Song #3", "Song #4"];
   };
 
   const getCurrentItems = () => {
@@ -127,18 +132,23 @@ export default function IPodScreen() {
       setCurrentScreen("menu");
       setSelectedIndex(0);
     } else if (currentScreen === "playlist") {
-      // Playlist screen - open track in Spotify
-      if (generatedPlaylist && currentIdx > 0) {
-        // Index 0 is the playlist name, so subtract 1 for track index
-        const trackIndex = currentIdx - 1;
-        const track = generatedPlaylist.tracks[trackIndex];
-        
-        if (track) {
-          try {
-            await openSpotifyTrack(track);
-          } catch (error) {
-            console.error("Error opening Spotify track:", error);
-            // Error is already handled by openSpotifyTrack with Alert
+      // Playlist screen
+      if (generatedPlaylist) {
+        if (currentIdx === 0) {
+          // "Select All" - Create Spotify playlist with all tracks
+          await handleCreateSpotifyPlaylist();
+        } else {
+          // Individual track - open track in Spotify
+          const trackIndex = currentIdx - 1; // Subtract 1 because index 0 is "Select All"
+          const track = generatedPlaylist.tracks[trackIndex];
+          
+          if (track) {
+            try {
+              await openSpotifyTrack(track);
+            } catch (error) {
+              console.error("Error opening Spotify track:", error);
+              // Error is already handled by openSpotifyTrack with Alert
+            }
           }
         }
       }
@@ -162,22 +172,74 @@ export default function IPodScreen() {
     }
   };
 
+  const handleCreateSpotifyPlaylist = async () => {
+    if (!generatedPlaylist) return;
+
+    setIsCreatingPlaylist(true);
+    setError(null);
+
+    try {
+      const description = `Generated for ${generatedPlaylist.location.areaType} area with ${selectedTheme} theme`;
+      const result = await createSpotifyPlaylistFromTracks(
+        generatedPlaylist.name,
+        generatedPlaylist.tracks,
+        description
+      );
+
+      if (result.success && result.playlistUrl) {
+        // Open the playlist in Spotify
+        await openSpotifyPlaylist(result.playlistUrl);
+        Alert.alert(
+          "Playlist Created!",
+          `Your playlist "${generatedPlaylist.name}" has been created on Spotify and is now opening.`,
+          [{ text: "OK" }]
+        );
+      } else {
+        throw new Error(result.error || "Failed to create playlist");
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to create Spotify playlist";
+      setError(errorMessage);
+      Alert.alert(
+        "Error Creating Playlist",
+        errorMessage,
+        [{ text: "OK" }]
+      );
+      console.error("Error creating Spotify playlist:", err);
+    } finally {
+      setIsCreatingPlaylist(false);
+    }
+  };
+
   const renderScreenContent = () => {
     const items = getCurrentItems();
     const currentIdx = getCurrentSelectedIndex();
 
     // Show loading state
-    if (isGenerating) {
+    if (isGenerating || isCreatingPlaylist) {
       return (
         <View style={screenStyles.screenContent}>
           <View style={screenStyles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.selectedBackground} />
-            <Text style={[screenStyles.loadingText, { marginTop: 12 }]}>
-              Getting location...
-            </Text>
-            <Text style={screenStyles.loadingText}>
-              Generating playlist...
-            </Text>
+            {isGenerating ? (
+              <>
+                <Text style={[screenStyles.loadingText, { marginTop: 12 }]}>
+                  Getting location...
+                </Text>
+                <Text style={screenStyles.loadingText}>
+                  Generating playlist...
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={[screenStyles.loadingText, { marginTop: 12 }]}>
+                  Authenticating with Spotify...
+                </Text>
+                <Text style={screenStyles.loadingText}>
+                  Creating playlist...
+                </Text>
+              </>
+            )}
           </View>
         </View>
       );
@@ -272,7 +334,7 @@ export default function IPodScreen() {
                 >
                   {index === 0 && (
                     <MaterialIcons
-                      name="check-box"
+                      name="playlist-add"
                       size={16}
                       color={isSelected ? "#fff" : "#000"}
                       style={screenStyles.menuIcon}
