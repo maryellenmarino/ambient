@@ -146,3 +146,4 @@ function formatAddress(address: Location.LocationGeocodedAddress): string {
   return parts.join(", ") || address.name || "Unknown location";
 }
 
+

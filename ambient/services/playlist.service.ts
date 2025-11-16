@@ -25,7 +25,7 @@ export interface GeneratedPlaylist {
  */
 export async function generatePlaylist(
   theme: Theme,
-  usePlaceholder: boolean = true
+  usePlaceholder: boolean = false
 ): Promise<GeneratedPlaylist> {
   try {
     // Get current location
@@ -48,7 +48,13 @@ export async function generatePlaylist(
     if (usePlaceholder) {
       apiResponse = await generatePlaylistFromAPIPlaceholder(request);
     } else {
-      apiResponse = await generatePlaylistFromAPI(request);
+      try {
+        apiResponse = await generatePlaylistFromAPI(request);
+      } catch (error) {
+        console.warn("API request failed, falling back to placeholder:", error);
+        // Fallback to placeholder if API fails
+        apiResponse = await generatePlaylistFromAPIPlaceholder(request);
+      }
     }
 
     return {

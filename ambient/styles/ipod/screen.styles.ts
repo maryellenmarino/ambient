@@ -25,6 +25,7 @@ export const screenStyles = StyleSheet.create({
     backgroundColor: Colors.screenContent,
     borderRadius: Spacing.screenContentBorderRadius,
     padding: Spacing.screenContentPadding,
+    overflow: "hidden", // Ensure content doesn't overflow
   },
   header: {
     flexDirection: "row",
@@ -52,11 +53,10 @@ export const screenStyles = StyleSheet.create({
   },
   menuList: {
     flex: 1,
-    maxHeight: SCREEN_HEIGHT - 60, // Account for header and padding
+    minHeight: 0, // Important: allows flex child to shrink below content size
   },
   menuListContent: {
-    flexGrow: 1,
-    paddingBottom: 8,
+    paddingBottom: 20, // Extra padding at bottom for scrolling
   },
   menuItemContainer: {
     flexDirection: "row",

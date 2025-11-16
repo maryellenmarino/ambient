@@ -75,14 +75,17 @@ export default function IPodScreen() {
     }
   };
 
-  // Auto-scroll when playlist is generated
+  // Auto-scroll when playlist is generated or selection changes
   useEffect(() => {
-    if (currentScreen === "playlist" && generatedPlaylist && selectedSongIndex === 0) {
+    if (currentScreen === "playlist" && generatedPlaylist) {
+      // Small delay to ensure layout is complete
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+        if (selectedSongIndex === 0) {
+          scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+        }
       }, 100);
     }
-  }, [currentScreen, generatedPlaylist]);
+  }, [currentScreen, generatedPlaylist, selectedSongIndex]);
 
   const handleWheelScroll = (direction: "up" | "down") => {
     const items = getCurrentItems();
@@ -165,6 +168,7 @@ export default function IPodScreen() {
 
     // Show error state
     if (error && currentScreen === "playlist") {
+      const isNetworkError = error.includes("Network") || error.includes("Cannot connect");
       return (
         <View style={screenStyles.screenContent}>
           <View style={screenStyles.loadingContainer}>
@@ -172,6 +176,11 @@ export default function IPodScreen() {
             <Text style={[screenStyles.loadingText, { marginTop: 12, color: "#ff0000" }]}>
               {error}
             </Text>
+            {isNetworkError && (
+              <Text style={[screenStyles.loadingText, { marginTop: 8, fontSize: 11, textAlign: "center", paddingHorizontal: 8 }]}>
+                Tip: Make sure backend is running. On mobile, use your computer's IP address.
+              </Text>
+            )}
             <Text style={[screenStyles.loadingText, { marginTop: 8, fontSize: 12 }]}>
               Press Menu to go back
             </Text>
@@ -220,6 +229,7 @@ export default function IPodScreen() {
             showsVerticalScrollIndicator={false}
             scrollEnabled={true}
             bounces={false}
+            nestedScrollEnabled={true}
           >
             {items.map((item, index) => {
               const isSelected = index === currentIdx;
@@ -233,8 +243,9 @@ export default function IPodScreen() {
                   onLayout={(event) => {
                     if (isSelected && scrollViewRef.current) {
                       const { y, height } = event.nativeEvent.layout;
-                      const scrollViewHeight = SCREEN_HEIGHT - 60; // Approximate visible height
-                      const scrollPosition = y - scrollViewHeight / 2 + height / 2;
+                      // Calculate visible area (screen height minus header and padding)
+                      const visibleHeight = SCREEN_HEIGHT - 100;
+                      const scrollPosition = y - visibleHeight / 2 + height / 2;
                       scrollViewRef.current.scrollTo({
                         y: Math.max(0, scrollPosition),
                         animated: true,
