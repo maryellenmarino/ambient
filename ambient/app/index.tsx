@@ -31,18 +31,18 @@ export default function IPodScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const menuItems = ["Theme", "Start"];
-  const themeItems: Theme[] = ["Fantasy", "Cyberpunk"];
+  const themeItems: Theme[] = ["fantasy", "cyberpunk", "hype", "emo", "dance", "rock", "instrumental"];
   
   const scrollViewRef = useRef<ScrollView>(null);
 
   const getPlaylistItems = () => {
     if (generatedPlaylist) {
       return [
-        "Select All",
+        "Generate Playlist",
         ...generatedPlaylist.tracks.map((track) => `${track.artist} - ${track.name}`),
       ];
     }
-    return ["Select All", "Song #1", "Song #2", "Song #3", "Song #4"];
+    return ["Generate Playlist", "Song #1", "Song #2", "Song #3", "Song #4"];
   };
 
   const getCurrentItems = () => {

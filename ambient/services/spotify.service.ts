@@ -8,7 +8,7 @@ import {
   addTracksToPlaylist,
 } from "./spotify-api.service";
 
-export type Theme = "Fantasy" | "Cyberpunk";
+export type Theme = "Fantasy" | "Cyberpunk" | "hype" | "emo" | "dance" | "rock" | "instrumental";
 
 export interface PlaylistTrack {
   name: string;
