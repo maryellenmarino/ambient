@@ -1,4 +1,4 @@
-import { Text, TouchableOpacity, View, ActivityIndicator, ScrollView } from "react-native";
+import { Text, TouchableOpacity, View, ActivityIndicator, ScrollView, Alert } from "react-native";
 import { useState, useRef, useEffect } from "react";
 import { MaterialIcons } from "@expo/vector-icons";
 import {
@@ -11,6 +11,11 @@ import {
 import { SCREEN_HEIGHT } from "@/styles/ipod/constants";
 import { generatePlaylist, GeneratedPlaylist } from "@/services/playlist.service";
 import { Theme } from "@/services/spotify.service";
+import { openSpotifyTrack } from "@/services/spotify-deeplink.service";
+import { 
+  createSpotifyPlaylistFromTracks, 
+  openSpotifyPlaylist 
+} from "@/services/spotify-playlist.service";
 
 type Screen = "menu" | "theme" | "playlist";
 
@@ -21,6 +26,7 @@ export default function IPodScreen() {
   const [selectedSongIndex, setSelectedSongIndex] = useState(0);
   const [selectedTheme, setSelectedTheme] = useState<Theme>("Fantasy");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [generatedPlaylist, setGeneratedPlaylist] = useState<GeneratedPlaylist | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,11 +38,11 @@ export default function IPodScreen() {
   const getPlaylistItems = () => {
     if (generatedPlaylist) {
       return [
-        generatedPlaylist.name,
+        "Select All",
         ...generatedPlaylist.tracks.map((track) => `${track.artist} - ${track.name}`),
       ];
     }
-    return ["Playlist", "Song #1", "Song #2", "Song #3", "Song #4"];
+    return ["Select All", "Song #1", "Song #2", "Song #3", "Song #4"];
   };
 
   const getCurrentItems = () => {
@@ -75,14 +81,17 @@ export default function IPodScreen() {
     }
   };
 
-  // Auto-scroll when playlist is generated
+  // Auto-scroll when playlist is generated or selection changes
   useEffect(() => {
-    if (currentScreen === "playlist" && generatedPlaylist && selectedSongIndex === 0) {
+    if (currentScreen === "playlist" && generatedPlaylist) {
+      // Small delay to ensure layout is complete
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+        if (selectedSongIndex === 0) {
+          scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+        }
       }, 100);
     }
-  }, [currentScreen, generatedPlaylist]);
+  }, [currentScreen, generatedPlaylist, selectedSongIndex]);
 
   const handleWheelScroll = (direction: "up" | "down") => {
     const items = getCurrentItems();
@@ -122,6 +131,27 @@ export default function IPodScreen() {
       setSelectedTheme(themeItems[currentIdx]);
       setCurrentScreen("menu");
       setSelectedIndex(0);
+    } else if (currentScreen === "playlist") {
+      // Playlist screen
+      if (generatedPlaylist) {
+        if (currentIdx === 0) {
+          // "Select All" - Create Spotify playlist with all tracks
+          await handleCreateSpotifyPlaylist();
+        } else {
+          // Individual track - open track in Spotify
+          const trackIndex = currentIdx - 1; // Subtract 1 because index 0 is "Select All"
+          const track = generatedPlaylist.tracks[trackIndex];
+          
+          if (track) {
+            try {
+              await openSpotifyTrack(track);
+            } catch (error) {
+              console.error("Error opening Spotify track:", error);
+              // Error is already handled by openSpotifyTrack with Alert
+            }
+          }
+        }
+      }
     }
   };
 
@@ -142,22 +172,74 @@ export default function IPodScreen() {
     }
   };
 
+  const handleCreateSpotifyPlaylist = async () => {
+    if (!generatedPlaylist) return;
+
+    setIsCreatingPlaylist(true);
+    setError(null);
+
+    try {
+      const description = `Generated for ${generatedPlaylist.location.areaType} area with ${selectedTheme} theme`;
+      const result = await createSpotifyPlaylistFromTracks(
+        generatedPlaylist.name,
+        generatedPlaylist.tracks,
+        description
+      );
+
+      if (result.success && result.playlistUrl) {
+        // Open the playlist in Spotify
+        await openSpotifyPlaylist(result.playlistUrl);
+        Alert.alert(
+          "Playlist Created!",
+          `Your playlist "${generatedPlaylist.name}" has been created on Spotify and is now opening.`,
+          [{ text: "OK" }]
+        );
+      } else {
+        throw new Error(result.error || "Failed to create playlist");
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to create Spotify playlist";
+      setError(errorMessage);
+      Alert.alert(
+        "Error Creating Playlist",
+        errorMessage,
+        [{ text: "OK" }]
+      );
+      console.error("Error creating Spotify playlist:", err);
+    } finally {
+      setIsCreatingPlaylist(false);
+    }
+  };
+
   const renderScreenContent = () => {
     const items = getCurrentItems();
     const currentIdx = getCurrentSelectedIndex();
 
     // Show loading state
-    if (isGenerating) {
+    if (isGenerating || isCreatingPlaylist) {
       return (
         <View style={screenStyles.screenContent}>
           <View style={screenStyles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.selectedBackground} />
-            <Text style={[screenStyles.loadingText, { marginTop: 12 }]}>
-              Getting location...
-            </Text>
-            <Text style={screenStyles.loadingText}>
-              Generating playlist...
-            </Text>
+            {isGenerating ? (
+              <>
+                <Text style={[screenStyles.loadingText, { marginTop: 12 }]}>
+                  Getting location...
+                </Text>
+                <Text style={screenStyles.loadingText}>
+                  Generating playlist...
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={[screenStyles.loadingText, { marginTop: 12 }]}>
+                  Authenticating with Spotify...
+                </Text>
+                <Text style={screenStyles.loadingText}>
+                  Creating playlist...
+                </Text>
+              </>
+            )}
           </View>
         </View>
       );
@@ -165,6 +247,7 @@ export default function IPodScreen() {
 
     // Show error state
     if (error && currentScreen === "playlist") {
+      const isNetworkError = error.includes("Network") || error.includes("Cannot connect");
       return (
         <View style={screenStyles.screenContent}>
           <View style={screenStyles.loadingContainer}>
@@ -172,6 +255,11 @@ export default function IPodScreen() {
             <Text style={[screenStyles.loadingText, { marginTop: 12, color: "#ff0000" }]}>
               {error}
             </Text>
+            {isNetworkError && (
+              <Text style={[screenStyles.loadingText, { marginTop: 8, fontSize: 11, textAlign: "center", paddingHorizontal: 8 }]}>
+                Tip: Make sure backend is running. On mobile, use your computer's IP address.
+              </Text>
+            )}
             <Text style={[screenStyles.loadingText, { marginTop: 8, fontSize: 12 }]}>
               Press Menu to go back
             </Text>
@@ -220,6 +308,7 @@ export default function IPodScreen() {
             showsVerticalScrollIndicator={false}
             scrollEnabled={true}
             bounces={false}
+            nestedScrollEnabled={true}
           >
             {items.map((item, index) => {
               const isSelected = index === currentIdx;
@@ -233,8 +322,9 @@ export default function IPodScreen() {
                   onLayout={(event) => {
                     if (isSelected && scrollViewRef.current) {
                       const { y, height } = event.nativeEvent.layout;
-                      const scrollViewHeight = SCREEN_HEIGHT - 60; // Approximate visible height
-                      const scrollPosition = y - scrollViewHeight / 2 + height / 2;
+                      // Calculate visible area (screen height minus header and padding)
+                      const visibleHeight = SCREEN_HEIGHT - 100;
+                      const scrollPosition = y - visibleHeight / 2 + height / 2;
                       scrollViewRef.current.scrollTo({
                         y: Math.max(0, scrollPosition),
                         animated: true,
@@ -244,7 +334,7 @@ export default function IPodScreen() {
                 >
                   {index === 0 && (
                     <MaterialIcons
-                      name="check-box"
+                      name="playlist-add"
                       size={16}
                       color={isSelected ? "#fff" : "#000"}
                       style={screenStyles.menuIcon}

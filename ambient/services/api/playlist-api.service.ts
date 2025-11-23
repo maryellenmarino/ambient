@@ -51,9 +51,17 @@ export interface PlaylistSaveResponse {
 export async function generatePlaylistFromAPI(
   request: PlaylistGenerateRequest
 ): Promise<PlaylistGenerateResponse> {
+  const endpoint = API_ENDPOINTS.PLAYLIST_GENERATE;
+  console.log(`[API] Requesting playlist from: ${endpoint}`);
+  console.log(`[API] Request data:`, {
+    theme: request.theme,
+    location: request.location,
+    limit: request.limit,
+  });
+
   try {
     const response = await apiRequest<PlaylistGenerateResponse>(
-      API_ENDPOINTS.PLAYLIST_GENERATE,
+      endpoint,
       {
         method: "POST",
         body: {
@@ -69,11 +77,13 @@ export async function generatePlaylistFromAPI(
       }
     );
 
+    console.log(`[API] Success! Received ${response.tracks.length} tracks`);
     return response;
   } catch (error) {
+    console.error(`[API] Request failed to ${endpoint}:`, error);
     if (error instanceof ApiClientError) {
       throw new Error(
-        `Failed to generate playlist: ${error.message} (${error.code})`
+        `Failed to generate playlist: ${error.message}`
       );
     }
     throw error;
@@ -109,4 +119,5 @@ export async function savePlaylistToAPI(
     throw error;
   }
 }
+
 

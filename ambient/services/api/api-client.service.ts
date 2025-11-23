@@ -53,8 +53,13 @@ export async function apiRequest<T>(
 
   for (let attempt = 0; attempt <= retryAttempts; attempt++) {
     try {
+      console.log(`[API Client] Attempt ${attempt + 1}/${retryAttempts + 1}: ${method} ${endpoint}`);
+      
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      const timeoutId = setTimeout(() => {
+        console.log(`[API Client] Request timeout after ${timeout}ms`);
+        controller.abort();
+      }, timeout);
 
       const requestHeaders: HeadersInit = {
         "Content-Type": "application/json",
@@ -69,10 +74,14 @@ export async function apiRequest<T>(
 
       if (body) {
         requestOptions.body = JSON.stringify(body);
+        console.log(`[API Client] Request body:`, JSON.stringify(body).substring(0, 200));
       }
-
+      
+      console.log(`[API Client] Making fetch request to: ${endpoint}`);
       const response = await fetch(endpoint, requestOptions);
       clearTimeout(timeoutId);
+      
+      console.log(`[API Client] Response received: ${response.status} ${response.statusText}`);
 
       if (!response.ok) {
         const errorData = await parseErrorResponse(response);
@@ -88,6 +97,46 @@ export async function apiRequest<T>(
       return data as T;
     } catch (error) {
       lastError = error as Error;
+      
+      // Log the error for debugging
+      console.error(`[API Client] Request error (attempt ${attempt + 1}):`, {
+        error: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        endpoint,
+      });
+
+      // Handle network errors (TypeError from fetch) - these occur when:
+      // - Backend is not running
+      // - Wrong URL (localhost on mobile device)
+      // - Network connectivity issues
+      // - CORS preflight failures
+      const isNetworkError = 
+        error instanceof TypeError ||
+        (error instanceof Error && (
+          error.message.includes("fetch") ||
+          error.message.includes("Network request failed") ||
+          error.message.includes("Failed to fetch") ||
+          error.message.includes("network") ||
+          error.message.includes("NetworkError")
+        ));
+      
+      if (isNetworkError) {
+        const networkError = new ApiClientError(
+          0,
+          "NETWORK_ERROR",
+          `Cannot connect to backend at ${endpoint}. ${getNetworkErrorMessage(endpoint)}`,
+          { originalError: error.message, endpoint }
+        );
+        
+        // Don't retry network errors on last attempt
+        if (attempt >= retryAttempts) {
+          throw networkError;
+        }
+        
+        lastError = networkError;
+        await delay(API_CONFIG.RETRY_DELAY * (attempt + 1));
+        continue;
+      }
 
       // Don't retry on client errors (4xx) except 429 (rate limit)
       if (
@@ -148,4 +197,15 @@ async function parseErrorResponse(
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Get helpful error message for network failures
+ */
+function getNetworkErrorMessage(endpoint: string): string {
+  if (endpoint.includes("localhost")) {
+    return "Make sure the backend is running. On mobile devices, use your computer's IP address instead of localhost.";
+  }
+  return "Check that the backend server is running and accessible.";
+}
+
 
