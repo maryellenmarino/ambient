@@ -23,7 +23,7 @@ Created for **HackRPI 2025** under the **Retro v Modern** theme.
 
 ## Demo Video
 
-<!-- TODO: Add demo video here -->
+https://github.com/user-attachments/assets/64bba8ff-dc47-448e-bddb-ae04ea99896c
 
 ## Creators
 
