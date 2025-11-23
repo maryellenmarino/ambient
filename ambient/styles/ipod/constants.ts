@@ -9,7 +9,7 @@ export const SCREEN_HEIGHT = IPOD_WIDTH / 1.6;
 
 // Colors
 export const Colors = {
-  background: "#1a1a1a",
+  background: "#F7A8C7",
   screenFrame: "#2a2a2a",
   screenBorder: "#000",
   screenContent: "#fff",
